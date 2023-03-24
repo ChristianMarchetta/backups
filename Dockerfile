@@ -17,7 +17,7 @@ WORKDIR /
 
 COPY --from=build /backups /backups
 
-RUN useradd -ms /bin/bash back
-USER back
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
 
 ENTRYPOINT ["/backups"]
