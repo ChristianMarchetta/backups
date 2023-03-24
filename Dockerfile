@@ -17,6 +17,7 @@ WORKDIR /
 
 COPY --from=build /backups /backups
 
-USER nonroot:nonroot
+RUN useradd -ms /bin/bash back
+USER back
 
 ENTRYPOINT ["/backups"]
