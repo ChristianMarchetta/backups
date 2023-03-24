@@ -146,7 +146,7 @@ func (t *S3Transferrer) restoreDir(ctx context.Context, ft FileTransfer) error {
 						return
 					}
 				}
-				err := t.restore(ctx, FileTransfer{Remote: obj.Key, Local: dst})
+				err := t.restore(ctx, FileTransfer{Remote: obj.Key, Local: dst}, true)
 				if err != nil {
 					t.Cancel(err)
 					return
@@ -209,7 +209,7 @@ func (t *S3Transferrer) restorePrefix(ctx context.Context, ft FileTransfer) erro
 					}
 				}
 
-				err = t.restore(ctx, FileTransfer{Remote: obj.Key, Local: dst})
+				err = t.restore(ctx, FileTransfer{Remote: obj.Key, Local: dst}, true)
 				if err != nil {
 					t.Cancel(err)
 					return
@@ -242,7 +242,7 @@ func (t *S3Transferrer) restoreFile(ctx context.Context, ft FileTransfer, fileTy
 			return
 		}
 
-		err = t.restore(ctx, ft)
+		err = t.restore(ctx, ft, false)
 		if err != nil {
 			t.Cancel(err)
 			return
@@ -252,16 +252,37 @@ func (t *S3Transferrer) restoreFile(ctx context.Context, ft FileTransfer, fileTy
 	return nil
 }
 
-func (t *S3Transferrer) restore(ctx context.Context, ft FileTransfer) error {
+func (t *S3Transferrer) restore(ctx context.Context, ft FileTransfer, errorIfRemoteNotExist bool) error {
 	var obj *minio.Object
 	var err error
+	var doesNotExists bool
 	err = t.limiter.Retry(func() error {
 		obj, err = t.s3.GetObject(ctx, t.s3Args.Bucket, ft.Remote, minio.GetObjectOptions{})
-		return err
+		if err != nil {
+			errResponse := minio.ToErrorResponse(err)
+			if errResponse.Code == "NoSuchKey" {
+				// remote file does not exist
+				doesNotExists = true
+				return nil
+			} else {
+				return fmt.Errorf("Cannot get remote object %s: %w", ft.Remote, err)
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("cannot get object %s: %w", ft.Remote, err)
 	}
+
+	if doesNotExists {
+		if errorIfRemoteNotExist {
+			return fmt.Errorf("remote file %s does not exist", ft.Remote)
+		} else {
+			log.Println("Ignored restore", ft, "because remote file does not exist.")
+			return nil
+		}
+	}
+
 	defer obj.Close()
 
 	dst, err := os.Create(ft.Local)
@@ -313,7 +334,7 @@ func (t *S3Transferrer) backupDir(ctx context.Context, ft FileTransfer, recursiv
 				err := t.backup(ctx, FileTransfer{
 					Remote: remote,
 					Local:  file,
-				})
+				}, true)
 				if err != nil {
 					t.Cancel(err)
 					return
@@ -328,7 +349,7 @@ func (t *S3Transferrer) backupDir(ctx context.Context, ft FileTransfer, recursiv
 
 func (t *S3Transferrer) backupFile(ctx context.Context, ft FileTransfer) error {
 	t.concurrency.NewTask(func() {
-		err := t.backup(ctx, ft)
+		err := t.backup(ctx, ft, false)
 		if err != nil {
 			t.Cancel(err)
 			return
@@ -338,9 +359,17 @@ func (t *S3Transferrer) backupFile(ctx context.Context, ft FileTransfer) error {
 	return nil
 }
 
-func (t *S3Transferrer) backup(ctx context.Context, ft FileTransfer) error {
+func (t *S3Transferrer) backup(ctx context.Context, ft FileTransfer, errorIfLocalNotExists bool) error {
 	f, err := os.Open(ft.Local)
 	if err != nil {
+		if err == os.ErrNotExist {
+			if errorIfLocalNotExists {
+				return fmt.Errorf("local file %s does not exist: %w", ft.Local, err)
+			} else {
+				log.Println("Ignored backup", ft, "because local file does not exist.")
+				return nil
+			}
+		}
 		return err
 	}
 	defer f.Close()
