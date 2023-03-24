@@ -31,7 +31,7 @@ func NewRateLimiter(args RateLimiterArgs) *RateLimiter {
 	}
 
 	return &RateLimiter{
-		ticker:     time.NewTicker(time.Duration(60/args.RequestsPerMin) * time.Second),
+		ticker:     time.NewTicker(time.Minute / time.Duration(args.RequestsPerMin)),
 		maxRetries: args.MaxRetries,
 	}
 }
