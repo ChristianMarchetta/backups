@@ -158,8 +158,7 @@ func backup(args []string) {
 	backup := flag.NewFlagSet("backup", flag.ExitOnError)
 
 	concurrentTransfers := backup.Uint("concurrent", 10, "The number of allowed concurrent uploads")
-	skipNotModiefiedFor := backup.Duration("skip-not-modified-for", 0, dedent.Dedent(`
-		Duration string. If set, files that have not been modified for the duration period or more will be ignored.
+	skipNotModiefiedFor := backup.Duration("skip-not-modified-for", 0, dedent.Dedent(`Duration string. If set, files that have not been modified for the duration period or more will be ignored.
 		Value must be parsable by Golang's time.ParseDuration() function.
 		"A duration string is a [...] signed sequence of decimal numbers, each with optional fraction and a unit suffix, such as '300ms', '-1.5h' or '2h45m'. Valid time units are 'ns', 'us' (or 'µs'), 'ms', 's', 'm', 'h'."
 		Note, using this option will cause an additional S3 object stat call for each local file.
